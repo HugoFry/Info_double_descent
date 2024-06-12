@@ -1,2 +1,4 @@
 #Initial commit
 torch == 2.3.1
+numpy == 1.26.4
+einops == 0.8.0
