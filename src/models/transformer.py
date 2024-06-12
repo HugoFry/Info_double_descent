@@ -192,6 +192,9 @@ class Transformer(nn.module):
         x = self.unembed(x)
         return x
     
+    def run_with_cache(self, x):
+        pass
+    
     def hook_points(self):
         return [module for name, module in self.named_modules() if 'hook' in name]
     
