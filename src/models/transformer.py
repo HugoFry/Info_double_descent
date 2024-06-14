@@ -1,16 +1,16 @@
 from torch import nn
-from config import transformer_config
+from .config import transformer_config
 import torch
 import einops
 import numpy as np
 
-class HookPoint(nn.module):
+class HookPoint(nn.Module):
     def __init__(self):
         super().__init__()
         self.forward_hooks = []
         self.backward_hooks = []
         
-    def give_name(self, name):
+    def add_name(self, name):
         # Used to as the key in the model's cache dictionary.
         # Name is the named_modules name of the parent model
         self.name = name
@@ -46,7 +46,7 @@ class HookPoint(nn.module):
         return x
 
 
-class Embed(nn.module):
+class Embed(nn.Module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.embedding = nn.Embedding(config.d_vocab, config.d_model)
@@ -56,7 +56,7 @@ class Embed(nn.module):
         return x
     
     
-class Unembed(nn.module):
+class Unembed(nn.Module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.unembedding = nn.Linear(config.d_model, config.d_vocab, bias = False)
@@ -70,7 +70,7 @@ class Unembed(nn.module):
     
 
 #Learnable positional embeddings.
-class PosEmbed(nn.module):
+class PosEmbed(nn.Module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.positional_embedding = nn.Parameter(torch.randn(config.n_ctx, config.d_model)/np.sqrt(config.d_model)) #Xavier initialisation?
@@ -80,12 +80,12 @@ class PosEmbed(nn.module):
         return x
     
 
-class MLP(nn.module):
+class MLP(nn.Module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.encoder = nn.Linear(config.d_model, config.d_mlp)
         if config.act_type == "relu":
-            self.activation_fn = nn.ReLu()
+            self.activation_fn = nn.ReLU()
         elif config.act_type == "gelu":
             self.activation_fn = nn.GELU()
         self.decoder = nn.Linear(config.d_mlp, config.d_model)
@@ -101,14 +101,14 @@ class MLP(nn.module):
         return x
     
     
-class Attention(nn.module):
+class Attention(nn.Module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.Q = nn.Parameter(torch.randn(config.num_heads, config.d_head, config.d_model)/np.sqrt(config.d_model))
         self.K = nn.Parameter(torch.randn(config.num_heads, config.d_head, config.d_model)/np.sqrt(config.d_model))
         self.V = nn.Parameter(torch.randn(config.num_heads, config.d_head, config.d_model)/np.sqrt(config.d_model))
         self.O = nn.Parameter(torch.randn(config.d_model, config.num_heads * config.d_head)/np.sqrt(config.num_heads * config.d_head))
-        self.register_buffer('mask', torch.trill(torch.ones(config.n_ctx, config.n_ctx)))
+        self.register_buffer('mask', torch.tril(torch.ones(config.n_ctx, config.n_ctx)))
         self.hook_k = HookPoint()
         self.hook_q = HookPoint()
         self.hook_v = HookPoint()
@@ -121,7 +121,7 @@ class Attention(nn.module):
         k = self.hook_k(torch.einsum('nhm,btm->bnth', self.K, x))
         v = self.hook_v(torch.einsum('nhm,btm->bnth', self.V, x))
         attn_pattern_pre = torch.einsum('bqnh,bknh->bnqk', q, k)
-        masked_attn_pattern_pre = self.hook_attention_pre(torch.trill(attn_pattern_pre) - (1 - self.mask[:x.shape[-2], :x.shape[-2]]) * 1e10)
+        masked_attn_pattern_pre = self.hook_attention_pre(torch.tril(attn_pattern_pre) - (1 - self.mask[:x.shape[-2], :x.shape[-2]]) * 1e10)
         attn_pattern = self.hook_attention(torch.Functional.softmax(masked_attn_pattern_pre, dim = -1))
         z = self.hook_z(torch.einsum('bnqk,bnkh->bnqh', attn_pattern, v))
         z = einops.rearange(z,'bnqh->bq(nh)')
@@ -129,7 +129,7 @@ class Attention(nn.module):
         return x
     
     
-class LayerNorm(nn.module):
+class LayerNorm(nn.Module):
     def __init__(self, config: transformer_config, epsilon = 1e-4):
         super().__init__()
         self.use_ln = config.use_ln
@@ -149,7 +149,7 @@ class LayerNorm(nn.module):
             return x
         
 
-class TransformerBlock(nn.module):
+class TransformerBlock(nn.Module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.ln1 = LayerNorm(config)
@@ -171,18 +171,18 @@ class TransformerBlock(nn.module):
         return x
     
 
-class Transformer(nn.module):
+class Transformer(nn.Module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.config = config
         self.cache = {}
-        self.embed = Embed()
-        self.pos_embed = PosEmbed()
+        self.embed = Embed(config)
+        self.pos_embed = PosEmbed(config)
         layers = []
         for layer in range(config.num_layers):
             layers.append(TransformerBlock(config))
         self.layers = nn.Sequential(*layers)
-        self.unembed = Unembed()
+        self.unembed = Unembed(config)
         
         for name, module in self.named_modules():
             if 'hook' in name:
