@@ -39,11 +39,7 @@ def train(model, train_dataloader, test_dataloader):
             output = model(batch_input)
             train_loss = loss_fn(output, batch_labels)
             train_loss.backward()
-            epoch_train_loss += train_loss.item()
-            
-            #Strange line of code... Trying to stabalise training runs but this is a massive bodge. Will fix this later.
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            
+            epoch_train_loss += train_loss.item()            
             optimizer.step()
             scheduler.step()
         epoch_train_loss /= len(train_dataloader)
