@@ -60,10 +60,13 @@ class Unembed(nn.module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.unembedding = nn.Linear(config.d_model, config.d_vocab, bias = False)
+        self.acivation_function = nn.Softmax()
     
     def forward(self, x):
         x = self.unembedding(x)
-        return x #Why don't we include a softmax here??
+        x = self.acivation_function(x, dim = -1)
+        assert x.shape(-2) == 3, 'Number of tokens in output unexpected!'
+        return x
     
 
 #Learnable positional embeddings.
