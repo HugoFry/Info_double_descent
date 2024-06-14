@@ -60,12 +60,9 @@ class Unembed(nn.Module):
     def __init__(self, config: transformer_config):
         super().__init__()
         self.unembedding = nn.Linear(config.d_model, config.d_vocab, bias = False)
-        self.acivation_function = nn.Softmax()
     
     def forward(self, x):
         x = self.unembedding(x)
-        x = self.acivation_function(x, dim = -1)
-        assert x.shape(-2) == 3, 'Number of tokens in output unexpected!'
         return x
     
 
@@ -120,11 +117,11 @@ class Attention(nn.Module):
         q = self.hook_q(torch.einsum('nhm,btm->bnth', self.Q, x))
         k = self.hook_k(torch.einsum('nhm,btm->bnth', self.K, x))
         v = self.hook_v(torch.einsum('nhm,btm->bnth', self.V, x))
-        attn_pattern_pre = torch.einsum('bqnh,bknh->bnqk', q, k)
+        attn_pattern_pre = torch.einsum('bnqh,bnkh->bnqk', q, k)
         masked_attn_pattern_pre = self.hook_attention_pre(torch.tril(attn_pattern_pre) - (1 - self.mask[:x.shape[-2], :x.shape[-2]]) * 1e10)
-        attn_pattern = self.hook_attention(torch.Functional.softmax(masked_attn_pattern_pre, dim = -1))
+        attn_pattern = self.hook_attention(torch.nn.functional.softmax(masked_attn_pattern_pre, dim = -1))
         z = self.hook_z(torch.einsum('bnqk,bnkh->bnqh', attn_pattern, v))
-        z = einops.rearange(z,'bnqh->bq(nh)')
+        z = einops.rearrange(z,'b n q h -> b q (n h)')
         x = torch.einsum('ma,bqa->bqm', self.O, z)
         return x
     

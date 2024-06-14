@@ -5,9 +5,9 @@ import torch
 import wandb
 
 def loss_fn(output, labels):
-    # Take the last token as the predicted probabilities
-    probabilities = output[:,-1,:] 
-    loss = nn.functional.cross_entropy(probabilities, labels)
+    # Take the last token as the predicted logits
+    logits = output[:,-1,:]
+    loss = nn.functional.cross_entropy(logits.to(torch.float64), labels)
     return loss
     
 
@@ -17,32 +17,52 @@ def train(model, train_dataloader, test_dataloader):
     Also need to upload them live to WandB.
     """
     wandb.init(project = "Hugo_double_descent", config = asdict(model.config))
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f'Using the following device: {device}!')
+    model.to(device)
     
-    optimizer = optim.AdamW(model.parameters(), model.config.lr, model.config.weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr = model.config.lr, weight_decay = model.config.weight_decay, betas=(0.9, 0.98))
+    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda step: min(step/10, 1))
     
     train_losses = []
     test_losses = []
     
     for epoch in range(model.config.num_epochs):
+        epoch_train_loss = 0
+        epoch_test_loss = 0
+        
         model.train()
-        for batch_input, batch_labels in train_dataloader:
+        for batch_data in train_dataloader:
+            batch_input = batch_data['data'].to(device)
+            batch_labels = batch_data['label'].to(device)
             optimizer.zero_grad()
             output = model(batch_input)
             train_loss = loss_fn(output, batch_labels)
             train_loss.backward()
-            train_losses.append(train_loss.item())
+            epoch_train_loss += train_loss.item()
+            
+            #Strange line of code... Trying to stabalise training runs but this is a massive bodge. Will fix this later.
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
+            scheduler.step()
+        epoch_train_loss /= len(train_dataloader)
+        train_losses.append(epoch_train_loss)
         
         model.eval()
         with torch.no_grad():
-            for batch_input, batch_labels in test_dataloader:
+            for batch_data in test_dataloader:
+                batch_input = batch_data['data'].to(device)
+                batch_labels = batch_data['label'].to(device)
                 output = model(batch_input)
                 test_loss = loss_fn(output, batch_labels)
-                test_losses.append(test_loss.item())
+                epoch_test_loss += test_loss.item()
+            epoch_test_loss /= len(test_dataloader)
+            test_losses.append(epoch_test_loss)
             
             #What else should I log here?
             wandb.log({
-                'train_loss': train_loss.item(),
-                'test_loss': test_loss.item(),
+                'train_loss': epoch_train_loss,
+                'test_loss': epoch_test_loss,
                 }, step = epoch)
     return train_losses, test_losses

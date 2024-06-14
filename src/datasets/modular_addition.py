@@ -14,13 +14,13 @@ class modular_addition(Dataset):
     def __getitem__(self, index):
         return {'data': self.data[index], 'label': self.labels[index]}
     
-def generate_test_train_split(prime: int, proportion_train: float, seed = 0):
+def generate_test_train_split(prime: int, proportion_train: float, seed: int,):
     dataset = modular_addition(prime)
     train_length = int(len(dataset)*proportion_train)
     test_length = len(dataset) - train_length
     train_dataset, test_dataset = random_split(dataset, [train_length, test_length])
     
     # Create data loader, using full batch training so don't need to shuffle the data.
-    train_dataloader = DataLoader(train_dataset, batch_size = len(train_dataset), shuffle = False)
-    test_dataloader = DataLoader(test_dataset, batch_size = len(test_dataset), shuffle = False)
+    train_dataloader = DataLoader(train_dataset, batch_size = len(train_dataset), shuffle = True)
+    test_dataloader = DataLoader(test_dataset, batch_size = len(test_dataset), shuffle = True)
     return train_dataloader, test_dataloader

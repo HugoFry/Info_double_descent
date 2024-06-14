@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 @dataclass
 class transformer_config():
+    seed: int = 0
     num_layers: int = 1
     d_model: int = 128
     prime: int = 113
@@ -13,15 +14,14 @@ class transformer_config():
     act_type: str = 'relu'
     use_cache: bool = False
     use_ln: bool = False
-    lr: float =1e-3
+    lr: float = 1e-3
     weight_decay: float = 1.0
     frac_train: float = 0.3
-    num_epochs: int = 50000
+    num_epochs: int = 100_000
     save_models: bool = False
     save_every: int = 100
     # Stop training when test loss is <stopping_thresh
     stopping_thresh: float = -1
-    batch_style: str = 'full'
     
     def __post_init__(self):
         assert self.act_type in ['relu', 'gelu'], f"Activation function {self.act_type} is not recognised."
