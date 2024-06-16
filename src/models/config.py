@@ -3,7 +3,7 @@ from dataclasses import dataclass
 @dataclass
 class transformer_config():
     seed: int = 0
-    num_layers: int = 1
+    num_layers: int = 2
     d_model: int = 128
     prime: int = 113
     d_vocab: int = prime + 1 # + 1 originates from the equals sign, needed to ensure learned commutitivity.

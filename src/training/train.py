@@ -1,6 +1,7 @@
 from torch import optim
 from torch import nn
 from dataclasses import asdict
+from tqdm import trange
 import torch
 import wandb
 
@@ -13,8 +14,15 @@ def loss_fn(output, labels):
 
 def train(model, train_dataloader, test_dataloader):
     """
-    Need to include an lr scheduler - See Neel's notebook
-    Also need to upload them live to WandB.
+    To do:
+        Need to upload train and test accuracies to WandB
+        Maybe upload maximum loss across the batch dimension - train - need to iterate through the train data loader twice, once in evals once in train mode.
+        Upload norm of the weights to WnB
+        Upload gradients to WnB
+        
+    Questions I want to understand:
+        Why do we get the shape of the loss curves around the spikes? eg why do we get a mini double descent in the train loss
+        How does weight decay fit into this?
     """
     wandb.init(project = "Hugo_double_descent", config = asdict(model.config))
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -27,7 +35,7 @@ def train(model, train_dataloader, test_dataloader):
     train_losses = []
     test_losses = []
     
-    for epoch in range(model.config.num_epochs):
+    for epoch in trange(model.config.num_epochs):
         epoch_train_loss = 0
         epoch_test_loss = 0
         
