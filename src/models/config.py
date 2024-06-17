@@ -3,7 +3,7 @@ from dataclasses import dataclass
 @dataclass
 class transformer_config():
     seed: int = 0
-    num_layers: int = 2
+    num_layers: int = 1
     d_model: int = 128
     prime: int = 113
     d_vocab: int = prime + 1 # + 1 originates from the equals sign, needed to ensure learned commutitivity.
@@ -22,6 +22,10 @@ class transformer_config():
     save_every: int = 100
     # Stop training when test loss is <stopping_thresh
     stopping_thresh: float = -1
+    wandb: bool = True
+    log_weight_norms: bool = True
+    log_activation_norms: bool = True
+    log_gradient_norms: bool = True
     
     def __post_init__(self):
         assert self.act_type in ['relu', 'gelu'], f"Activation function {self.act_type} is not recognised."
