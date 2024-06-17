@@ -1,5 +1,6 @@
 from torch import nn
 from .config import transformer_config
+from contextlib import contextmanager
 import torch
 import einops
 import numpy as np
@@ -15,14 +16,14 @@ class HookPoint(nn.Module):
         # Name is the named_modules name of the parent model
         self.name = name
     
-    def create_hook(self, hook, dir = "forward"):
+    def add_hook(self, hook, dir = "forward"):
         def hook_fn(module, input, output):
             return hook(output, name=self.name)
         if dir == "forward":
             handle = self.register_forward_hook(hook_fn)
             self.forward_hooks.append(handle)
         elif dir == "backward":
-            handle = self.register_backward_hook(hook_fn)
+            handle = self.register_full_backward_hook(hook_fn)
             self.backward_hooks.append(handle)
         else:
             raise ValueError(f"Unrecognised hook direction: {dir}")
@@ -191,25 +192,46 @@ class Transformer(nn.Module):
         x = self.layers(x)
         x = self.unembed(x)
         return x
+            
+    def add_forward_hooks(self):
+        def forward_hook_fn(tensor, name):
+            self.cache[name] = tensor.detach()
+            
+        for hook_point in self.hook_points():
+            hook_point.add_hook(forward_hook_fn, dir = 'forward')
+            
+    def add_backward_hooks(self):
+        def backward_hook_fn(tensor, name):
+            self.cache[name + '_grad'] = tensor[0].detach()
+            
+        for hook_point in self.hook_points():
+            hook_point.add_hook(backward_hook_fn, dir = 'backward')
     
-    def run_with_cache(self, x):
-        pass
-    
-    def hook_points(self):
-        return [module for name, module in self.named_modules() if 'hook' in name]
+    def add_all_hooks(self):
+        self.add_forward_hooks()
+        self.add_backward_hooks()
     
     def remove_all_hooks(self):
         for hook_point in self.hook_points():
             hook_point.remove_hooks('both')
     
-    def cache_all(self, include_backward = False):
-        def forward_hook_fn(tensor, name):
-            self.cache[name] = tensor.detach()
-            
-        def backward_hook_fn(tensor, name):
-            self.chache[name + '_grad'] = tensor[0].detach()
-            
-        for hook_point in self.hook_points():
-            hook_point.create_hook(forward_hook_fn, dir = 'forward')
-            if include_backward:
-                hook_point.create_hook(backward_hook_fn, dir = 'backward')
+    def hook_points(self):
+        return [module for name, module in self.named_modules() if 'hook' in name]
+    
+    def clear_cache(self):
+        self.cache = {}
+        
+    @contextmanager
+    def evaluation_hooks(self):
+        try:
+            if self.config.log_gradient_norms or self.config.log_activation_norms:
+                self.clear_cache()
+                self.remove_all_hooks()
+                if self.config.log_gradient_norms:
+                    self.add_backward_hooks()
+                if self.config.log_activation_norms:
+                    self.add_forward_hooks()
+            yield
+        finally:
+            if self.config.log_activation_norms or self.config.log_gradient_norms:
+                self.remove_all_hooks()
