@@ -45,6 +45,8 @@ def train(model, train_dataloader, test_dataloader):
         Why do we get the shape of the loss curves around the spikes? eg why do we get a mini double descent in the train loss (Does the gradient give this value...?)
         How does weight decay fit into this?
         Has this got anything to do with the curvature in the loss landscape?
+        The weight norms suggest that the model is constantly fighting against weight decay. How does this play out mathematically?
+            It is qualitatively different to l2 loss: the model will update in the radial direction when using AdamW...
     """
     assert len(train_dataloader) == 1 and len(test_dataloader) == 1, "All my evals are only done assuming full batch training"
     
@@ -74,7 +76,19 @@ def train(model, train_dataloader, test_dataloader):
             evaluate_on_test(model, test_dataloader, epoch, device)
             if model.config.log_weight_norms:
                 log_wandb_model_weight_norms(model, epoch)
+            if model.config.log_optimizer_moments_norm:
+                log_optimizer_moments_norm(model, optimizer, epoch)
 
+
+def log_optimizer_moments_norm(model, optimizer, epoch):
+    optimizer_moments = {}
+    for name, param in model.named_parameters():
+        state = optimizer.state[param]
+        m = torch.norm(state['exp_avg'].clone())
+        v = torch.norm(state['exp_avg_sq'].clone())
+        optimizer_moments[f'moments/m/{name}'] = m
+        optimizer_moments[f'moments/v/{name}'] = v
+    wandb.log(optimizer_moments, step = epoch)
 
 
 def evaluate_on_train(model, train_dataloader, epoch, device):    

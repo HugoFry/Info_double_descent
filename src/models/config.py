@@ -26,6 +26,8 @@ class transformer_config():
     log_weight_norms: bool = True
     log_activation_norms: bool = True
     log_gradient_norms: bool = True
+    log_weight_changes: bool = True
+    log_optimizer_moments_norm: bool = True
     
     def __post_init__(self):
         assert self.act_type in ['relu', 'gelu'], f"Activation function {self.act_type} is not recognised."

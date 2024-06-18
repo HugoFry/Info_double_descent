@@ -131,10 +131,10 @@ class LayerNorm(nn.Module):
     def __init__(self, config: transformer_config, epsilon = 1e-4):
         super().__init__()
         self.use_ln = config.use_ln
-        self.epsilon = epsilon
-        self.weight = nn.Parameter(torch.ones(config.d_model))
-        self.bias = nn.Parameter(torch.zeros(config.d_model))
-        pass
+        if config.use_ln:
+            self.epsilon = epsilon
+            self.weight = nn.Parameter(torch.ones(config.d_model))
+            self.bias = nn.Parameter(torch.zeros(config.d_model))
     
     def forward(self, x):
         if self.use_ln:
