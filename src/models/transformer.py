@@ -224,14 +224,11 @@ class Transformer(nn.Module):
     @contextmanager
     def evaluation_hooks(self):
         try:
-            if self.config.log_gradient_norms or self.config.log_activation_norms:
+            if self.config.log_activation_norms:
                 self.clear_cache()
                 self.remove_all_hooks()
-                if self.config.log_gradient_norms:
-                    self.add_backward_hooks()
-                if self.config.log_activation_norms:
-                    self.add_forward_hooks()
+                self.add_forward_hooks()
             yield
         finally:
-            if self.config.log_activation_norms or self.config.log_gradient_norms:
+            if self.config.log_activation_norms:
                 self.remove_all_hooks()

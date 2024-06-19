@@ -55,7 +55,7 @@ def train(model, train_dataloader, test_dataloader):
     print(f'Using the following device: {device}!')
     model.to(device)
     
-    optimizer = optim.AdamW(model.parameters(), lr = model.config.lr, weight_decay = model.config.weight_decay, betas=(0.9, 0.98))
+    optimizer = optim.AdamW(model.parameters(), lr = model.config.lr, weight_decay = 0, betas=(0.9, 0.98))
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda step: min(step/10, 1))
     
     for epoch in trange(model.config.num_epochs):
@@ -66,41 +66,51 @@ def train(model, train_dataloader, test_dataloader):
             optimizer.zero_grad()
             output = model(batch_input)
             train_loss = loss_fn(output, batch_labels)
-            train_loss.backward()          
+            train_loss.backward()
+            # Implement weight decay manually...
+            with torch.no_grad():
+                for parameter in model.parameters():
+                    parameter -= model.config.weight_decay * scheduler.get_last_lr()[0] * parameter
             optimizer.step()
             scheduler.step()
         
         if model.config.wandb:
             model.eval()
-            evaluate_on_train(model, train_dataloader, epoch, device)
+            evaluate_on_train(model, train_dataloader, optimizer, epoch, device)
             evaluate_on_test(model, test_dataloader, epoch, device)
             if model.config.log_weight_norms:
                 log_wandb_model_weight_norms(model, epoch)
             if model.config.log_optimizer_moments_norm:
-                log_optimizer_moments_norm(model, optimizer, epoch)
+                log_optimizer_moments_norm(model, optimizer, scheduler, epoch)
 
 
-def log_optimizer_moments_norm(model, optimizer, epoch):
+def log_optimizer_moments_norm(model, optimizer, scheduler, epoch):
     optimizer_moments = {}
     for name, param in model.named_parameters():
         state = optimizer.state[param]
-        m = torch.norm(state['exp_avg'].clone())
-        v = torch.norm(state['exp_avg_sq'].clone())
+        m = state['exp_avg'].clone()
+        v = state['exp_avg_sq'].clone()
+        delta = torch.norm(scheduler.get_last_lr()[0] * m/(torch.sqrt(v) + 1e-8))
+        m = torch.norm(m)
+        v = torch.norm(v)
         optimizer_moments[f'moments/m/{name}'] = m
         optimizer_moments[f'moments/v/{name}'] = v
+        optimizer_moments[f'moments/delta/{name}'] = delta
     wandb.log(optimizer_moments, step = epoch)
 
 
-def evaluate_on_train(model, train_dataloader, epoch, device):    
+def evaluate_on_train(model, train_dataloader, optimizer, epoch, device):    
     for batch_data in train_dataloader:
         batch_input = batch_data['data'].to(device)
         batch_labels = batch_data['label'].to(device)
                 
         with model.evaluation_hooks():
             if model.config.log_gradient_norms:
+                optimizer.zero_grad()
                 output = model(batch_input)
                 train_loss = loss_fn(output, batch_labels)
                 train_loss.backward()
+                log_wandb_model_gradient_norms(model, epoch)
             else:
                 with torch.no_grad():
                     output = model(batch_input)
@@ -117,16 +127,11 @@ def evaluate_on_train(model, train_dataloader, epoch, device):
             }, step = epoch)
     
     if cache:
-        #Compute the norms of acts/grads from the full vectors
+        assert model.config.log_activation_norms, "Hooks have been incorrectly registered"
         for key, value in cache.items():
+            assert '_grad' not in key, "Backward hooks are not yet supported"
             cache[key] = torch.norm(value, dim = -1).mean().item()
-            
-        if model.config.log_gradient_norms:
-            grads_dict = {f'gradients/{key.replace('_grad','')}': value for key, value in cache.items() if '_grad' in key}
-            wandb.log(grads_dict, step = epoch)
-        if model.config.log_activation_norms:
-            acts_dict = {f'activations/{key}': value for key, value in cache.items() if '_grad' not in key}
-            wandb.log(acts_dict, step = epoch)
+        wandb.log({f'activations/{key}': value for key, value in cache.items()}, step = epoch)
     
     
 def evaluate_on_test(model, test_dataloader, epoch, device):
@@ -143,33 +148,22 @@ def evaluate_on_test(model, test_dataloader, epoch, device):
             'test_loss': test_loss,
             'test_accuracy': test_accuracy
             }, step = epoch)
-
+        
 
 def log_wandb_model_weight_norms(model, epoch):
-    mlp_encoder_weights_norm = torch.norm(model.layers[-1].mlp.encoder.weight.data.clone().detach()).item()
-    mlp_decoder_weights_norm = torch.norm(model.layers[-1].mlp.decoder.weight.data.clone().detach()).item()
-    mlp_total_weight_norm = sqrt(mlp_encoder_weights_norm**2 + mlp_decoder_weights_norm**2)
-    attention_q_weights_norm = torch.norm(model.layers[-1].attention.Q.clone().detach()).item()
-    attention_k_weights_norm = torch.norm(model.layers[-1].attention.K.clone().detach()).item()
-    attention_v_weights_norm = torch.norm(model.layers[-1].attention.V.clone().detach()).item()
-    attention_o_weights_norm = torch.norm(model.layers[-1].attention.O.clone().detach()).item()
-    attention_total_weight_norm = sqrt(attention_q_weights_norm**2 + attention_k_weights_norm**2 + attention_v_weights_norm**2 + attention_o_weights_norm**2)
-    layer_total_weight_norm = sqrt(mlp_total_weight_norm**2 + attention_total_weight_norm**2)
-    embedding_weights_norm = torch.norm(model.embed.embedding.weight.data.clone().detach()).item()
-    unembedding_weights_norm = torch.norm(model.unembed.unembedding.weight.data.clone().detach()).item()
-    positional_embedding_weights_norm = torch.norm(model.pos_embed.positional_embedding.clone().detach()).item()
-    
-    wandb.log({
-        'weight_norms/mlp_in': mlp_encoder_weights_norm,
-        'weight_norms/mlp_out': mlp_decoder_weights_norm,
-        'weight_norms/mlp_total': mlp_total_weight_norm,
-        'weight_norms/attention_q': attention_q_weights_norm,
-        'weight_norms/attention_k': attention_k_weights_norm,
-        'weight_norms/attention_v': attention_v_weights_norm,
-        'weight_norms/attention_o': attention_o_weights_norm,
-        'weight_norms/attention_total': attention_total_weight_norm,
-        'weight_norms/layer_total': layer_total_weight_norm,
-        'weight_norms/embedding': embedding_weights_norm,
-        'weight_norms/unembedding': unembedding_weights_norm,
-        'weight_norms/positional_embedding': positional_embedding_weights_norm,
-    }, step = epoch)
+    weight_norms_dict = {}
+    total = 0
+    for name, parameter in model.named_parameters():
+        norm = torch.norm(parameter.clone().detach()).item()
+        weight_norms_dict[f'weight_norms/{name}'] = norm
+        total += norm**2
+    total = sqrt(total)
+    weight_norms_dict['weight_norms/total'] = total
+    wandb.log(weight_norms_dict, step = epoch)
+        
+        
+def log_wandb_model_gradient_norms(model, epoch):
+    gradient_norms_dict = {}
+    for name, parameter in model.named_parameters():
+        gradient_norms_dict[f'gradients/{name}'] = torch.norm(parameter.grad.clone().detach()).item()
+    wandb.log(gradient_norms_dict, step = epoch)
