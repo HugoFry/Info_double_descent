@@ -40,8 +40,8 @@ def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir = '../src/chec
     torch.save(checkpoint_dict, path)
     
 def delete_old_checkpoints(current_epoch, num_checkpoints = 10, checkpoint_dir = '../src/checkpoints'):
-    checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.pth')]
-    epoch_pattern = re.compile(r'epoch_(\d+)\.pth')
+    checkpoint_files = [f for f in os.listdir(checkpoint_dir)]
+    epoch_pattern = re.compile(r'epoch_(\d+)')
     for file in checkpoint_files:
         match = epoch_pattern.search(file)
         if match:
@@ -71,6 +71,7 @@ def train(model, train_dataloader, test_dataloader):
             It is qualitatively different to l2 loss: the model will update in the radial direction when using AdamW...
     """
     assert len(train_dataloader) == 1 and len(test_dataloader) == 1, "All my evals are only done assuming full batch training"
+    assert model.config.has_trained == False
     
     wandb.init(project = "Hugo_double_descent", config = asdict(model.config))
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -98,16 +99,19 @@ def train(model, train_dataloader, test_dataloader):
         
         if model.config.wandb:
             model.eval()
-            evaluate_on_train(model, train_dataloader, optimizer, epoch, device)
+            train_loss = evaluate_on_train(model, train_dataloader, optimizer, epoch, device)
+            if train_loss < 1e-4:
+                model.config.has_trained = True
             evaluate_on_test(model, test_dataloader, epoch, device)
             if model.config.log_weight_norms:
                 log_wandb_model_weight_norms(model, epoch)
             if model.config.log_optimizer_moments_norm:
                 log_optimizer_moments_norm(model, optimizer, scheduler, epoch)
-        
-        if model.config.save_checkpoints:
-            delete_old_checkpoints(epoch)
-            save_checkpoint(model, optimizer, epoch, train_loss.item())
+            if model.config.save_checkpoints:
+                delete_old_checkpoints(epoch)
+                save_checkpoint(model, optimizer, epoch, train_loss)
+                if model.config.has_trained and train_loss > 1e-4:
+                    model.config.save_checkpoints = False
 
 
 def log_optimizer_moments_norm(model, optimizer, scheduler, epoch):
@@ -147,7 +151,7 @@ def evaluate_on_train(model, train_dataloader, optimizer, epoch, device):
         train_accuracy = get_accuracy(output, batch_labels)
     
     wandb.log({
-            'train_loss': train_loss,
+            'train_loss': train_loss.item(),
             'max_train_loss': max_train_loss,
             'train_accuracy': train_accuracy,
             }, step = epoch)
@@ -159,6 +163,7 @@ def evaluate_on_train(model, train_dataloader, optimizer, epoch, device):
             cache[key] = torch.norm(value, dim = -1).mean().item()
         wandb.log({f'activations/{key}': value for key, value in cache.items()}, step = epoch)
     
+    return train_loss.item()
     
 def evaluate_on_test(model, test_dataloader, epoch, device):
     for batch_data in test_dataloader:

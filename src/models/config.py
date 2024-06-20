@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 @dataclass
 class transformer_config():
+    has_trained: bool = False
     seed: int = 0
     num_layers: int = 1
     d_model: int = 128
