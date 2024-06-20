@@ -16,6 +16,7 @@ class transformer_config():
     use_cache: bool = False
     use_ln: bool = False
     lr: float = 1e-3
+    betas: tuple = (0.9, 0.98)
     weight_decay: float = 1.0
     frac_train: float = 0.3
     num_epochs: int = 100_000

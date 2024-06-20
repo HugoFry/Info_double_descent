@@ -5,3 +5,5 @@ numpy == 1.26.4
 einops == 0.8.0
 wandb == 0.17.1
 tqdm == 4.66.4
+plotly == 5.22.0
+pandas == 2.2.2

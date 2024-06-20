@@ -22,6 +22,13 @@ def get_max_loss_in_batch(output, labels):
     max_loss = loss.max().item()
     return max_loss
 
+def get_full_loss(output, labels):
+    # Take the last token as the predicted logits
+    logits = output[:,-1,:]
+    loss = nn.functional.cross_entropy(logits.to(torch.float64), labels, reduction = 'none')
+    # Could alos return variance in the future?
+    return loss
+
 def get_accuracy(output, labels):
     # Take the last token as the predicted logits
     logits = output[:,-1,:]
@@ -31,15 +38,16 @@ def get_accuracy(output, labels):
 
 def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir = '../src/checkpoints'):
     checkpoint_dict = {
-        'model': model.state_dict,
-        'optimizer': optimizer.state_dict,
+        'config': model.config,
+        'model': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
         'epoch': epoch,
         'loss': loss,
     }
     path = f'{checkpoint_dir}/epoch_{epoch}'
     torch.save(checkpoint_dict, path)
     
-def delete_old_checkpoints(current_epoch, num_checkpoints = 10, checkpoint_dir = '../src/checkpoints'):
+def delete_old_checkpoints(current_epoch, num_checkpoints = 20, checkpoint_dir = '../src/checkpoints'):
     checkpoint_files = [f for f in os.listdir(checkpoint_dir)]
     epoch_pattern = re.compile(r'epoch_(\d+)')
     for file in checkpoint_files:
@@ -71,14 +79,14 @@ def train(model, train_dataloader, test_dataloader):
             It is qualitatively different to l2 loss: the model will update in the radial direction when using AdamW...
     """
     assert len(train_dataloader) == 1 and len(test_dataloader) == 1, "All my evals are only done assuming full batch training"
-    assert model.config.has_trained == False
     
-    wandb.init(project = "Hugo_double_descent", config = asdict(model.config))
+    if model.config.wandb:
+        wandb.init(project = "Hugo_double_descent", config = asdict(model.config))
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f'Using the following device: {device}!')
     model.to(device)
     
-    optimizer = optim.AdamW(model.parameters(), lr = model.config.lr, weight_decay = 0, betas=(0.9, 0.98))
+    optimizer = optim.AdamW(model.parameters(), lr = model.config.lr, weight_decay = model.config.weight_decay, betas=model.config.betas)
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda step: min(step/10, 1))
     
     for epoch in trange(model.config.num_epochs):
@@ -90,10 +98,6 @@ def train(model, train_dataloader, test_dataloader):
             output = model(batch_input)
             train_loss = loss_fn(output, batch_labels)
             train_loss.backward()
-            # Implement weight decay manually...
-            with torch.no_grad():
-                for parameter in model.parameters():
-                    parameter -= model.config.weight_decay * scheduler.get_last_lr()[0] * parameter
             optimizer.step()
             scheduler.step()
         
@@ -112,6 +116,7 @@ def train(model, train_dataloader, test_dataloader):
                 save_checkpoint(model, optimizer, epoch, train_loss)
                 if model.config.has_trained and train_loss > 1e-4:
                     model.config.save_checkpoints = False
+    wandb.finish()
 
 
 def log_optimizer_moments_norm(model, optimizer, scheduler, epoch):
@@ -150,8 +155,16 @@ def evaluate_on_train(model, train_dataloader, optimizer, epoch, device):
         max_train_loss = get_max_loss_in_batch(output, batch_labels)
         train_accuracy = get_accuracy(output, batch_labels)
     
+    '''
+    Note that the training dynamics of AdamW and Adam are VERY different.
+    The wight decay term is the dominant term for total loss, and yet contributes a similar amount to the parameter updates
+    due to the adaptive component of Adam. Strange. I need to think about it much more...
+    '''
+    l2_loss = l2_reg(model)
+    
     wandb.log({
             'train_loss': train_loss.item(),
+            'l2_loss': l2_loss,
             'max_train_loss': max_train_loss,
             'train_accuracy': train_accuracy,
             }, step = epoch)
@@ -191,7 +204,13 @@ def log_wandb_model_weight_norms(model, epoch):
     total = sqrt(total)
     weight_norms_dict['weight_norms/total'] = total
     wandb.log(weight_norms_dict, step = epoch)
-        
+    
+def l2_reg(model):
+    total = 0
+    for name, parameter in model.named_parameters():
+        norm = torch.norm(parameter.clone().detach()).item()
+        total += norm**2
+    return total
         
 def log_wandb_model_gradient_norms(model, epoch):
     gradient_norms_dict = {}

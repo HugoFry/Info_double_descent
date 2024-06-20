@@ -15,6 +15,7 @@ class modular_addition(Dataset):
         return {'data': self.data[index], 'label': self.labels[index]}
     
 def generate_test_train_split(prime: int, proportion_train: float, seed: int,):
+    torch.manual_seed(seed)
     dataset = modular_addition(prime)
     train_length = int(len(dataset)*proportion_train)
     test_length = len(dataset) - train_length
