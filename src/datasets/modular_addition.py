@@ -21,6 +21,6 @@ def generate_test_train_split(prime: int, proportion_train: float, seed: int,):
     train_dataset, test_dataset = random_split(dataset, [train_length, test_length])
     
     # Create data loader, using full batch training so don't need to shuffle the data.
-    train_dataloader = DataLoader(train_dataset, batch_size = len(train_dataset), shuffle = True)
-    test_dataloader = DataLoader(test_dataset, batch_size = len(test_dataset), shuffle = True)
+    train_dataloader = DataLoader(train_dataset, batch_size = len(train_dataset), shuffle = False)
+    test_dataloader = DataLoader(test_dataset, batch_size = len(test_dataset), shuffle = False)
     return train_dataloader, test_dataloader
