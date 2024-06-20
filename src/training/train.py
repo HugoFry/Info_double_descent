@@ -27,6 +27,16 @@ def get_accuracy(output, labels):
     accuracy = torch.gather(probabilities, -1, labels.unsqueeze(-1)).squeeze().mean().item()
     return accuracy
 
+def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir = '../checkpoints'):
+    checkpoint_dict = {
+        'model': model.state_dict,
+        'optimizer': optimizer.state_dict,
+        'epoch': epoch,
+        'loss': loss,
+    }
+    path = f'{checkpoint_dir}/epoch_{epoch}'
+    torch.save(checkpoint_dict, path)
+
 def train(model, train_dataloader, test_dataloader):
     """
     To do:
@@ -82,6 +92,9 @@ def train(model, train_dataloader, test_dataloader):
                 log_wandb_model_weight_norms(model, epoch)
             if model.config.log_optimizer_moments_norm:
                 log_optimizer_moments_norm(model, optimizer, scheduler, epoch)
+        
+        if model.config.save_checkpoints:
+            save_checkpoint(model, optimizer, epoch, train_loss.item())
 
 
 def log_optimizer_moments_norm(model, optimizer, scheduler, epoch):

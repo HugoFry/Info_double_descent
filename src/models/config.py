@@ -22,6 +22,7 @@ class transformer_config():
     save_every: int = 100
     # Stop training when test loss is <stopping_thresh
     stopping_thresh: float = -1
+    save_checkpoints: bool = True
     wandb: bool = True
     log_weight_norms: bool = True
     log_activation_norms: bool = True
