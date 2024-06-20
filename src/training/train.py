@@ -5,6 +5,8 @@ from tqdm import trange
 from math import sqrt
 import torch
 import wandb
+import os
+import re
 
 def loss_fn(output, labels):
     # Take the last token as the predicted logits
@@ -27,7 +29,7 @@ def get_accuracy(output, labels):
     accuracy = torch.gather(probabilities, -1, labels.unsqueeze(-1)).squeeze().mean().item()
     return accuracy
 
-def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir = '../checkpoints'):
+def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir = '../src/checkpoints'):
     checkpoint_dict = {
         'model': model.state_dict,
         'optimizer': optimizer.state_dict,
@@ -36,6 +38,16 @@ def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir = '../checkpoi
     }
     path = f'{checkpoint_dir}/epoch_{epoch}'
     torch.save(checkpoint_dict, path)
+    
+def delete_old_checkpoints(current_epoch, num_checkpoints = 10, checkpoint_dir = '../src/checkpoints'):
+    checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.pth')]
+    epoch_pattern = re.compile(r'epoch_(\d+)\.pth')
+    for file in checkpoint_files:
+        match = epoch_pattern.search(file)
+        if match:
+            epoch = int(match.group(1))
+            if epoch <= current_epoch - num_checkpoints:
+                os.remove(f'{checkpoint_dir}/{file}')
 
 def train(model, train_dataloader, test_dataloader):
     """
@@ -94,6 +106,7 @@ def train(model, train_dataloader, test_dataloader):
                 log_optimizer_moments_norm(model, optimizer, scheduler, epoch)
         
         if model.config.save_checkpoints:
+            delete_old_checkpoints(epoch)
             save_checkpoint(model, optimizer, epoch, train_loss.item())
 
 
