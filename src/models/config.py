@@ -15,7 +15,7 @@ class transformer_config():
     act_type: str = 'relu'
     use_cache: bool = False
     use_ln: bool = False
-    lr: float = 1e-3
+    lr: float = 3e-5
     betas: tuple = (0.9, 0.98)
     weight_decay: float = 1.0
     frac_train: float = 0.3
@@ -31,6 +31,7 @@ class transformer_config():
     log_gradient_norms: bool = True
     log_weight_changes: bool = True
     log_optimizer_moments_norm: bool = True
+    max_grad_norm: float = 1
     
     def __post_init__(self):
         assert self.act_type in ['relu', 'gelu'], f"Activation function {self.act_type} is not recognised."

@@ -1,3 +1,4 @@
 # Initial commit
 notebooks/wandb
-src/checkpoints
+checkpoints/
+__pycache__/

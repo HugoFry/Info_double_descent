@@ -7,6 +7,7 @@ import torch
 import wandb
 import os
 import re
+import os
 
 def loss_fn(output, labels):
     # Take the last token as the predicted logits
@@ -37,6 +38,8 @@ def get_accuracy(output, labels):
     return accuracy
 
 def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir = '../src/checkpoints'):
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
     checkpoint_dict = {
         'config': model.config,
         'model': model.state_dict(),
@@ -48,14 +51,15 @@ def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir = '../src/chec
     torch.save(checkpoint_dict, path)
     
 def delete_old_checkpoints(current_epoch, num_checkpoints = 20, checkpoint_dir = '../src/checkpoints'):
-    checkpoint_files = [f for f in os.listdir(checkpoint_dir)]
-    epoch_pattern = re.compile(r'epoch_(\d+)')
-    for file in checkpoint_files:
-        match = epoch_pattern.search(file)
-        if match:
-            epoch = int(match.group(1))
-            if epoch <= current_epoch - num_checkpoints:
-                os.remove(f'{checkpoint_dir}/{file}')
+    if os.path.exists(checkpoint_dir):
+        checkpoint_files = [f for f in os.listdir(checkpoint_dir)]
+        epoch_pattern = re.compile(r'epoch_(\d+)')
+        for file in checkpoint_files:
+            match = epoch_pattern.search(file)
+            if match:
+                epoch = int(match.group(1))
+                if epoch <= current_epoch - num_checkpoints:
+                    os.remove(f'{checkpoint_dir}/{file}')
 
 def train(model, train_dataloader, test_dataloader):
     """
@@ -98,6 +102,7 @@ def train(model, train_dataloader, test_dataloader):
             output = model(batch_input)
             train_loss = loss_fn(output, batch_labels)
             train_loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), model.config.max_grad_norm)
             optimizer.step()
             scheduler.step()
         
@@ -145,6 +150,7 @@ def evaluate_on_train(model, train_dataloader, optimizer, epoch, device):
                 output = model(batch_input)
                 train_loss = loss_fn(output, batch_labels)
                 train_loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), model.config.max_grad_norm)
                 log_wandb_model_gradient_norms(model, epoch)
             else:
                 with torch.no_grad():
