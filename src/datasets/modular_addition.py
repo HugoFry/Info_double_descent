@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset, DataLoader, random_split
 import torch
 
-class modular_addition(Dataset):
+class ModularAddition(Dataset):
     def __init__(self, prime: int):
         super().__init__()
         self.prime = prime
@@ -16,7 +16,7 @@ class modular_addition(Dataset):
     
 def generate_test_train_split(prime: int, proportion_train: float, seed: int,):
     torch.manual_seed(seed)
-    dataset = modular_addition(prime)
+    dataset = ModularAddition(prime)
     train_length = int(len(dataset)*proportion_train)
     test_length = len(dataset) - train_length
     train_dataset, test_dataset = random_split(dataset, [train_length, test_length])

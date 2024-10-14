@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 @dataclass
-class transformer_config():
+class TransformerConfig():
     has_trained: bool = False
     seed: int = 0
     num_layers: int = 1

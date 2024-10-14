@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field
 from torch import nn
-from config import MLP_config
+from config import MINEConfig
 import torch
     
-class fully_connected_layer(nn.module):
-    def __init__(self, config: MLP_config, input_dimensions: int, output_dimensions: int):
-        super(fully_connected_layer, self).__init__()
+class FullyConnectedLayer(nn.module):
+    def __init__(self, config: MINEConfig, input_dimensions: int, output_dimensions: int):
+        super().__init__()
         self.linear = nn.Linear(input_dimensions, output_dimensions)
         self.batch_norm = nn.BatchNorm1d(output_dimensions)
         if config.activation_function == 'relu':
@@ -27,9 +27,9 @@ class fully_connected_layer(nn.module):
         x = self.dropout(x)
         return x
     
-class linear_layer(nn.module):
+class LinearLayer(nn.module):
     def __init__(self, input_dimensions: int, output_dimensions: int):
-        super(linear_layer, self).__init__()
+        super().__init__()
         self.linear = nn.Linear(input_dimensions, output_dimensions)
         
         #Initialise the weights and biases.
@@ -41,25 +41,20 @@ class linear_layer(nn.module):
         return x
 
 
-class MLP_network(nn.module):
-    def __init__(self, config: MLP_config):
-        super(MLP_network, self).__init__()
+class MLP(nn.module):
+    def __init__(self, config: MINEConfig):
+        super().__init__()
         self.config = config
         layers = []
         
         #Define all but the last layer
         for i in range(len(config.dimensions)-2):
-            layers.append(fully_connected_layer(config, config.dimensions[i], config.dimensions[i+1]))
+            layers.append(FullyConnectedLayer(config, config.dimensions[i], config.dimensions[i+1]))
         
         #Just a linear layer for the output layer
-        layers.append(linear_layer(config.dimensions[-2], config.dimensions[-1]))
+        layers.append(LinearLayer(config.dimensions[-2], config.dimensions[-1]))
                 
         self.layers = nn.Sequential(*layers)
-        
-        # if config.optimizer == 'adam':
-        #     self.optimizer = torch.optim.Adam(self.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
-        # else:
-        #     raise Exception(f'The optimizer {config.optimizer} is not recognised')
         
     def forward(self, x):
         return self.layers[x]

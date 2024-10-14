@@ -1,5 +1,5 @@
 from torch import nn
-from .config import transformer_config
+from .config import TransformerConfig
 from contextlib import contextmanager
 import torch
 import einops
@@ -48,7 +48,7 @@ class HookPoint(nn.Module):
 
 
 class Embed(nn.Module):
-    def __init__(self, config: transformer_config):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
         self.embedding = nn.Embedding(config.d_vocab, config.d_model)
     
@@ -58,7 +58,7 @@ class Embed(nn.Module):
     
     
 class Unembed(nn.Module):
-    def __init__(self, config: transformer_config):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
         self.unembedding = nn.Linear(config.d_model, config.d_vocab, bias = False)
     
@@ -69,7 +69,7 @@ class Unembed(nn.Module):
 
 #Learnable positional embeddings.
 class PosEmbed(nn.Module):
-    def __init__(self, config: transformer_config):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
         self.positional_embedding = nn.Parameter(torch.randn(config.n_ctx, config.d_model)/np.sqrt(config.d_model)) #Xavier initialisation?
     
@@ -79,7 +79,7 @@ class PosEmbed(nn.Module):
     
 
 class MLP(nn.Module):
-    def __init__(self, config: transformer_config):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
         self.encoder = nn.Linear(config.d_model, config.d_mlp)
         if config.act_type == "relu":
@@ -100,7 +100,7 @@ class MLP(nn.Module):
     
     
 class Attention(nn.Module):
-    def __init__(self, config: transformer_config):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
         self.Q = nn.Parameter(torch.randn(config.num_heads, config.d_head, config.d_model)/np.sqrt(config.d_model))
         self.K = nn.Parameter(torch.randn(config.num_heads, config.d_head, config.d_model)/np.sqrt(config.d_model))
@@ -128,7 +128,7 @@ class Attention(nn.Module):
     
     
 class LayerNorm(nn.Module):
-    def __init__(self, config: transformer_config, epsilon = 1e-4):
+    def __init__(self, config: TransformerConfig, epsilon = 1e-4):
         super().__init__()
         self.use_ln = config.use_ln
         if config.use_ln:
@@ -148,7 +148,7 @@ class LayerNorm(nn.Module):
         
 
 class TransformerBlock(nn.Module):
-    def __init__(self, config: transformer_config):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
         self.ln1 = LayerNorm(config)
         self.attention = Attention(config)
@@ -170,7 +170,7 @@ class TransformerBlock(nn.Module):
     
 
 class Transformer(nn.Module):
-    def __init__(self, config: transformer_config):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
         self.config = config
         self.cache = {}
